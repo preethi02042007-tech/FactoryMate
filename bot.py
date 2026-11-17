@@ -14,7 +14,7 @@ from telegram.ext import (
 
 from quote_parser import extract_quote
 
-TOKEN = os.environ["TELEGRAM_TOKEN"]
+TOKEN = os.environ.get["TELEGRAM_TOKEN"]
 
 os.makedirs("media", exist_ok=True)
 
