@@ -1,0 +1,31 @@
+
+# Python temporary files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+
+# Private configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Database and private business data
+*.db
+*.sqlite
+*.sqlite3
+
+# Messages and uploaded media
+collected_messages/
+media/
+
+# Local price history and test records
+supplier_price_history.json
+
+# Editor and operating system files
+.vscode/
+.DS_Store
+Thumbs.db
