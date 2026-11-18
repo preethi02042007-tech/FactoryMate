@@ -1,117 +1,125 @@
 
-import json
-import os
-from datetime import datetime
+import sqlite3
+from collections import defaultdict
 
-HISTORY_FILE = "supplier_price_history.json"
-
-
-def load_history():
-
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r") as file:
-            return json.load(file)
-
-    return {}
+DB_NAME = "assistant.db"
 
 
-def save_history(history):
+def get_price_history():
 
-    with open(HISTORY_FILE, "w") as file:
-        json.dump(history, file, indent=4)
+    connection = sqlite3.connect(DB_NAME)
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+
+    query = """
+        SELECT
+            COALESCE(s.company_name, s.supplier_name, q.supplier)
+                AS supplier_name,
+            q.material,
+            q.price_per_kg,
+            DATE(q.created) AS price_date,
+            q.id
+        FROM quotations q
+        INNER JOIN suppliers s
+            ON q.supplier_id = s.id
+        WHERE
+            q.supplier_id IS NOT NULL
+            AND q.material IS NOT NULL
+            AND q.price_per_kg IS NOT NULL
+        ORDER BY
+            supplier_name,
+            q.material,
+            q.created ASC,
+            q.id ASC
+    """
+
+    cursor.execute(query)
+    records = cursor.fetchall()
+
+    connection.close()
+
+    return records
 
 
-def record_price(supplier, material, price_per_kg):
+def remove_duplicate_entries(records):
 
-    if not supplier or not material or price_per_kg is None:
-        print("Cannot save price: information is missing.")
-        return
+    grouped = defaultdict(list)
 
-    history = load_history()
-    supplier_key = supplier + "|" + material
-    previous_prices = history.get(supplier_key, [])
+    for record in records:
 
-    if previous_prices:
+        key = (
+            record["supplier_name"],
+            record["material"]
+        )
 
-        previous_price = previous_prices[-1]["price_per_kg"]
+        grouped[key].append(record)
 
-        print(f"Previous price: ₹{previous_price}/kg")
-        print(f"New price: ₹{price_per_kg}/kg")
+    cleaned_history = {}
 
-        difference = price_per_kg - previous_price
+    for key, entries in grouped.items():
 
-        if difference > 0:
-            print(f"Price increased by ₹{difference}/kg")
-        elif difference < 0:
-            print(f"Price decreased by ₹{abs(difference)}/kg")
-        else:
-            print("Price has not changed.")
+        unique_entries = []
+        seen = set()
 
-    else:
-        print(f"No previous price for {supplier}.")
+        for entry in entries:
 
-    today = datetime.now().strftime("%Y-%m-%d")
+            duplicate_key = (
+                entry["price_date"],
+                entry["price_per_kg"]
+            )
 
-    if previous_prices:
-        last_record = previous_prices[-1]
+            if duplicate_key not in seen:
+                unique_entries.append(entry)
+                seen.add(duplicate_key)
 
-        if (
-            last_record["price_per_kg"] == price_per_kg
-            and last_record["date"] == today
-        ):
-            print("Same price already recorded today.")
-            return
+        cleaned_history[key] = unique_entries
 
-    previous_prices.append({
-        "price_per_kg": price_per_kg,
-        "date": today
-    })
-
-    history[supplier_key] = previous_prices
-    save_history(history)
+    return cleaned_history
 
 
 def show_price_history():
 
-    history = load_history()
-
     print("\nSUPPLIER PRICE HISTORY")
-    print("SAMPLE / TEST DATA — NOT REAL RESPONSES")
+    print("SOURCE: SQLITE DATABASE")
+    print("NOTE: SAMPLE / TEST DATA IS NOT REAL SUPPLIER DATA")
 
-    if not history:
-        print("No price history available.")
+    records = get_price_history()
+
+    if not records:
+        print("\nNo registered supplier price records found.")
         return
 
-    for supplier_key, records in history.items():
+    history = remove_duplicate_entries(records)
 
-        supplier, material = supplier_key.split("|", 1)
+    for (supplier, material), entries in history.items():
 
         print("\n--------------------------")
-        print("Supplier:", supplier)
-        print("Material:", material)
+        print(f"Supplier: {supplier}")
+        print(f"Material: {material}")
 
-        for record in records:
+        for entry in entries:
+
             print(
-                f"Date: {record['date']} | "
-                f"Price: ₹{record['price_per_kg']}/kg"
+                f"Date: {entry['price_date']} | "
+                f"Price: ₹{entry['price_per_kg']}/kg"
             )
 
-        if len(records) >= 2:
+        first_price = entries[0]["price_per_kg"]
+        latest_price = entries[-1]["price_per_kg"]
 
-            first_price = records[0]["price_per_kg"]
-            latest_price = records[-1]["price_per_kg"]
+        print(f"\nFirst recorded price: ₹{first_price}/kg")
+        print(f"Latest recorded price: ₹{latest_price}/kg")
 
-            difference = latest_price - first_price
+        difference = latest_price - first_price
 
-            print(f"First recorded price: ₹{first_price}/kg")
-            print(f"Latest recorded price: ₹{latest_price}/kg")
+        if difference > 0:
+            print(f"Overall increase: ₹{difference}/kg")
 
-            if difference > 0:
-                print(f"Overall increase: ₹{difference}/kg")
-            elif difference < 0:
-                print(f"Overall decrease: ₹{abs(difference)}/kg")
-            else:
-                print("Overall price unchanged.")
+        elif difference < 0:
+            print(f"Overall decrease: ₹{abs(difference)}/kg")
+
+        else:
+            print("Overall price unchanged.")
 
 
 if __name__ == "__main__":
