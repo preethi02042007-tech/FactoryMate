@@ -1,7 +1,5 @@
 
 import logging
-logging.basicConfig(level=logging.INFO)
-
 import os
 import sqlite3
 
@@ -14,11 +12,27 @@ from telegram.ext import (
 
 from quote_parser import extract_quote
 
-TOKEN = os.environ.get["TELEGRAM_TOKEN"]
+
+# CONFIGURATION
+
+logging.basicConfig(level=logging.INFO)
+
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+
+if not TOKEN:
+    raise ValueError(
+        "TELEGRAM_TOKEN is not set. Please configure it first."
+    )
 
 os.makedirs("media", exist_ok=True)
 
-db = sqlite3.connect("assistant.db", check_same_thread=False)
+
+# DATABASE CONNECTION
+
+db = sqlite3.connect(
+    "assistant.db",
+    check_same_thread=False
+)
 
 
 # CREATE TABLES
@@ -65,13 +79,17 @@ CREATE TABLE IF NOT EXISTS suppliers(
 db.commit()
 
 
-# ADD NEW COLUMNS TO EXISTING QUOTATIONS TABLE
+# DATABASE COLUMN MIGRATION
 
 def ensure_column(table, column, definition):
 
-    cursor = db.execute(f"PRAGMA table_info({table})")
+    cursor = db.execute(
+        f"PRAGMA table_info({table})"
+    )
 
-    existing_columns = [row[1] for row in cursor.fetchall()]
+    existing_columns = [
+        row[1] for row in cursor.fetchall()
+    ]
 
     if column not in existing_columns:
         db.execute(
@@ -100,7 +118,7 @@ def save(chat_id, direction, kind, text=None, file_path=None):
     db.commit()
 
 
-# FIND REGISTERED SUPPLIER USING TELEGRAM ACCOUNT ID
+# FIND REGISTERED SUPPLIER
 
 def find_supplier_by_telegram_id(chat_id):
 
@@ -163,7 +181,7 @@ def save_quotation(chat_id, supplier, quote, original_message):
     db.commit()
 
 
-# SHOW TELEGRAM ACCOUNT ID
+# TELEGRAM ACCOUNT ID COMMAND
 
 async def my_id(update, context):
 
@@ -203,7 +221,12 @@ async def on_text(update, context):
         and quote["price_per_kg"] is not None
     ):
 
-        save_quotation(m.chat_id, supplier, quote, m.text)
+        save_quotation(
+            m.chat_id,
+            supplier,
+            quote,
+            m.text
+        )
 
         if supplier:
             identity_message = (
@@ -259,7 +282,7 @@ async def on_voice(update, context):
     )
 
 
-# HANDLE PHOTOS
+# HANDLE PHOTO MESSAGES
 
 async def on_photo(update, context):
 
@@ -283,11 +306,14 @@ async def on_photo(update, context):
 async def start(update, context):
 
     await update.message.reply_text(
-        "Welcome to Buying Assistant!\n\n"
+        "Welcome to FactoryMate!\n\n"
+        "Your Smart Manufacturing Partner.\n\n"
         "Send a supplier quotation in text format.\n"
         "Use /myid to view your Telegram account ID."
     )
 
+
+# START TELEGRAM BOT
 
 app = ApplicationBuilder().token(TOKEN).build()
 
@@ -295,10 +321,21 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("myid", my_id))
 
 app.add_handler(
-    MessageHandler(filters.TEXT & ~filters.COMMAND, on_text)
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        on_text
+    )
 )
 
-app.add_handler(MessageHandler(filters.VOICE, on_voice))
-app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+app.add_handler(
+    MessageHandler(filters.VOICE, on_voice)
+)
 
-app.run_polling()
+app.add_handler(
+    MessageHandler(filters.PHOTO, on_photo)
+)
+
+
+if __name__ == "__main__":
+    print("FACTORYMATE TELEGRAM BOT STARTING...")
+    app.run_polling()
